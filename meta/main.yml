@@ -1,0 +1,17 @@
+---
+galaxy_info:
+  author: Yakovlev Sergey
+  description: OpenVPN as service
+  company: Home lab
+  license: GPL
+
+  min_ansible_version: "Min Ansible Version"
+
+  platforms:
+    - name: Ubuntu
+      versions:
+        - all
+
+  galaxy_tags: []
+
+dependencies: []
