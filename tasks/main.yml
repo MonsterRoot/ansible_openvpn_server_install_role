@@ -1,29 +1,152 @@
 ---
-# tasks
-- name: 1.0 Install prerequisites in Ubuntu
+- name: Install OpenVPN and Easy-RSA
   apt:
-    pkg:
-      - traceroute
-      - net-tools
-    state: latest
-    update_cache: true
-    install_recommends: no
-  when: ansible_distribution == "Ubuntu"
-
-
-- name: 1.0 Install OpenVPN and EasyRSA in Ubuntu
-  apt:
-    pkg:
+    name:
       - openvpn
       - easy-rsa
-    state: latest
-    update_cache: true
-    install_recommends: no
-  when: ansible_distribution == "Ubuntu"
+    state: present
+    update_cache: yes
 
-- name: 2.0. ln ~/easy-rsa
-  shell: mkdir ~/easy-rsa -p && ln -s /usr/share/easy-rsa/* ~/easy-rsa/ && sudo chown sergey ~/easy-rsa && chmod 700 ~/easy-rsa
-  register: haproxy_version_minor
-  when: ansible_distribution == 'CentOS'
+- name: Create Easy-RSA directory
+  file:
+    path: /etc/openvpn/easy-rsa
+    state: directory
 
+- name: Copy Easy-RSA scripts
+  shell: cp -r /usr/share/easy-rsa/* /etc/openvpn/easy-rsa/
+  args:
+    creates: /etc/openvpn/easy-rsa/easyrsa
 
+- name: Initialize the PKI
+  command: ./easyrsa init-pki
+  args:
+    chdir: /etc/openvpn/easy-rsa
+    creates: /etc/openvpn/easy-rsa/pki
+
+- name: Build the CA
+  command: ./easyrsa build-ca nopass
+  args:
+    chdir: /etc/openvpn/easy-rsa
+    creates: /etc/openvpn/easy-rsa/pki/ca.crt
+  environment:
+    EASYRSA_BATCH: "yes"
+    EASYRSA_REQ_CN: "OpenVPN-CA"
+    EASYRSA_REQ_COUNTRY: "{{ openvpn_country }}"
+    EASYRSA_REQ_PROVINCE: "{{ openvpn_province }}"
+    EASYRSA_REQ_CITY: "{{ openvpn_city }}"
+    EASYRSA_REQ_ORG: "{{ openvpn_org }}"
+    EASYRSA_REQ_EMAIL: "{{ openvpn_email }}"
+    EASYRSA_REQ_OU: "{{ openvpn_ou }}"
+
+- name: Generate server certificate and key
+  command: ./easyrsa build-server-full server nopass
+  args:
+    chdir: /etc/openvpn/easy-rsa
+    creates: /etc/openvpn/easy-rsa/pki/issued/server.crt
+
+- name: Generate Diffie-Hellman key
+  command: ./easyrsa gen-dh
+  args:
+    chdir: /etc/openvpn/easy-rsa
+    creates: /etc/openvpn/easy-rsa/pki/dh.pem
+
+- name: Generate HMAC signature
+  command: openvpn --genkey --secret ta.key
+  args:
+    chdir: /etc/openvpn/easy-rsa/pki
+    creates: /etc/openvpn/easy-rsa/pki/ta.key
+
+- name: Create certs directory
+  file:
+    path: /etc/openvpn/certs
+    state: directory
+
+- name: Copy server certificate and key
+  copy:
+    src: "/etc/openvpn/easy-rsa/pki/private/server.key"
+    dest: "/etc/openvpn/certs/server.key"
+    remote_src: yes
+  notify: restart openvpn
+
+- name: Copy server certificate
+  copy:
+    src: "/etc/openvpn/easy-rsa/pki/issued/server.crt"
+    dest: "/etc/openvpn/certs/server.crt"
+    remote_src: yes
+  notify: restart openvpn
+
+- name: Copy CA certificate
+  copy:
+    src: "/etc/openvpn/easy-rsa/pki/ca.crt"
+    dest: "/etc/openvpn/certs/ca.crt"
+    remote_src: yes
+  notify: restart openvpn
+
+- name: Copy Diffie-Hellman key
+  copy:
+    src: "/etc/openvpn/easy-rsa/pki/dh.pem"
+    dest: "/etc/openvpn/certs/dh.pem"
+    remote_src: yes
+  notify: restart openvpn
+
+- name: Copy HMAC signature
+  copy:
+    src: "/etc/openvpn/easy-rsa/pki/ta.key"
+    dest: "/etc/openvpn/certs/ta.key"
+    remote_src: yes
+  notify: restart openvpn
+
+- name: Deploy OpenVPN server configuration
+  template:
+    src: server.conf.j2
+    dest: /etc/openvpn/server.conf
+  notify: restart openvpn
+
+- name: Enable and start OpenVPN service
+  systemd:
+    name: openvpn@server
+    enabled: yes
+    state: started
+
+- name: Generate client certificate and key
+  command: ./easyrsa build-client-full "{{ openvpn_client_name }}" nopass
+  args:
+    chdir: /etc/openvpn/easy-rsa
+    creates: "/etc/openvpn/easy-rsa/pki/issued/{{ openvpn_client_name }}.crt"
+
+- name: Fetch CA certificate
+  slurp:
+    src: "/etc/openvpn/easy-rsa/pki/ca.crt"
+  register: ca_cert_content
+  delegate_to: "{{ inventory_hostname }}"
+
+- name: Fetch client certificate
+  slurp:
+    src: "/etc/openvpn/easy-rsa/pki/issued/{{ openvpn_client_name }}.crt"
+  register: client_cert_content
+  delegate_to: "{{ inventory_hostname }}"
+
+- name: Fetch client key
+  slurp:
+    src: "/etc/openvpn/easy-rsa/pki/private/{{ openvpn_client_name }}.key"
+  register: client_key_content
+  delegate_to: "{{ inventory_hostname }}"
+
+- name: Fetch TLS auth key
+  slurp:
+    src: "/etc/openvpn/easy-rsa/pki/ta.key"
+  register: ta_key_content
+  delegate_to: "{{ inventory_hostname }}"
+
+- name: Generate client configuration file
+  template:
+    src: client.conf.j2
+    dest: "/etc/openvpn/client/{{ openvpn_client_name }}.ovpn"
+  delegate_to: localhost
+  vars:
+    ca_cert: "{{ ca_cert_content['content'] | b64decode }}"
+    client_cert: "{{ client_cert_content['content'] | b64decode }}"
+    client_key: "{{ client_key_content['content'] | b64decode }}"
+    ta_key: "{{ ta_key_content['content'] | b64decode }}"
+  notify: restart openvpn
+  become: true

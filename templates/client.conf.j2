@@ -1,0 +1,38 @@
+client
+dev tun
+route-metric 50
+proto {{ openvpn_proto }}
+port  {{ openvpn_port }}
+remote '{{ openvpn_server_address }}'
+
+route-nopull
+
+resolv-retry infinite
+nobind
+persist-key
+persist-tun
+remote-cert-tls server
+cipher AES-256-CBC
+auth-nocache
+verb 3
+
+<ca>
+{{ ca_cert }}
+</ca>
+
+<cert>
+{{ client_cert }}
+</cert>
+
+<key>
+{{ client_key }}
+</key>
+
+<tls-auth>
+{{ ta_key }}
+</tls-auth>
+key-direction 1
+
+script-security 2
+log-append /var/log/openvpn.log
+status /var/log/openvpn-status.log
