@@ -1,7 +1,7 @@
 port {{ openvpn_port }}
 proto {{ openvpn_proto }}
 dev {{ openvpn_dev }}
-data-ciphers AES-256-CBC
+data-ciphers AES-256-GCM
 
 ca /etc/openvpn/certs/ca.crt
 cert /etc/openvpn/certs/server.crt
@@ -9,7 +9,7 @@ key /etc/openvpn/certs/server.key
 dh /etc/openvpn/certs/dh.pem
 tls-auth /etc/openvpn/certs/ta.key 0
 
-server {{ openvpn_server }}
+server {{ openvpn_net }} {{ openvpn_mask }}
 ifconfig-pool-persist ipp.txt
 push "redirect-gateway def1 bypass-dhcp"
 push "dhcp-option DNS 8.8.8.8"
