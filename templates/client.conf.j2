@@ -3,7 +3,7 @@ dev tun
 route-metric 50
 proto {{ openvpn_proto }}
 port  {{ openvpn_port }}
-remote '{{ openvpn_server_address }}'
+remote '{{ external_ip.content | trim }}'
 
 route-nopull
 
@@ -12,7 +12,7 @@ nobind
 persist-key
 persist-tun
 remote-cert-tls server
-cipher AES-256-CBC
+cipher AES-256-GCM
 auth-nocache
 verb 3
 
