@@ -16,18 +16,24 @@
     - "openvpn_email: {{ openvpn_email }}"
     - "openvpn_ou: {{ openvpn_ou }}"
 
-- name: Install OpenVPN and Easy-RSA
+- name: Install OpenVPN, Easy-RSA, iptables, iptables-persistent in Ubuntu
   apt:
     name:
       - openvpn
       - easy-rsa
+      - iptables
+      - iptables-persistent
     state: present
     update_cache: yes
+  when: ansible_distribution == "Ubuntu"
+
+
 
 - name: Create Easy-RSA directory
   file:
     path: /etc/openvpn/easy-rsa
     state: directory
+  
 
 - name: Copy Easy-RSA scripts
   shell: cp -r /usr/share/easy-rsa/* /etc/openvpn/easy-rsa/
@@ -169,14 +175,6 @@
     warn: false
   when: sysctl_conf.changed
 
-- name: Install iptables and iptables-persistent
-  apt:
-    name:
-      - iptables
-      - iptables-persistent
-    state: present
-    update_cache: yes
-
 - name: Get the default route interface
   command: ip route show default
   register: default_route
@@ -205,9 +203,12 @@
   ignore_errors: yes
 
 - name: Add iptables rule for NAT if not present
-  command: iptables -t nat -A POSTROUTING -s {{ openvpn_net }}{{ openvpn_mask_short }} -o {{ internet_interface }} -j MASQUERADE && netfilter-persistent save
+  command: iptables -t nat -A POSTROUTING -s {{ openvpn_net }}{{ openvpn_mask_short }} -o {{ internet_interface }} -j MASQUERADE
   when: iptables_rule_check.rc != 0
 
+- name: Save iptables rules for NAT
+  command: netfilter-persistent save
+  when: iptables_rule_check.rc != 0
 
 - name: Generate client configuration file
   template:
