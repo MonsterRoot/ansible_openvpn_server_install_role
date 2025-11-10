@@ -2,6 +2,7 @@
 openvpn_port: 443
 openvpn_proto: tcp
 openvpn_dev: tun
+openvpn_net: "10.8.0.0"
 openvpn_country: "US"
 openvpn_province: "CA"
 openvpn_city: "SanFrancisco"
