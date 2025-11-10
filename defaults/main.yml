@@ -1,0 +1,11 @@
+---
+openvpn_port: 443
+openvpn_proto: tcp
+openvpn_dev: tun
+openvpn_server: "10.8.1.0 255.255.255.0"
+openvpn_country: "US"
+openvpn_province: "CA"
+openvpn_city: "SanFrancisco"
+openvpn_org: "MyOrg"
+openvpn_email: "email@example.com"
+openvpn_ou: "MyOU"
