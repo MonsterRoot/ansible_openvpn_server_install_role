@@ -212,7 +212,7 @@
 
 - name: Generate client configuration file
   template:
-    src: ""
+    src: "{{ openvpn_client_config_template }}"
     dest: "client_{{ inventory_hostname }}.ovpn"
   delegate_to: localhost
   vars:
